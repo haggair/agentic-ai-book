@@ -1,0 +1,133 @@
+version: "3.9"
+
+# ============================================================
+# agentic-ai-book — Docker Compose
+# Services: Qdrant (vector DB), Redis (state/cache), Jupyter
+#
+# Usage:
+#   docker compose up -d qdrant redis     # start supporting services
+#   docker compose up -d                  # start everything incl. Jupyter
+#   docker compose down                   # stop all services
+#   docker compose logs -f qdrant         # tail logs
+#
+# NOTE: The GAS capstone uses FAISS (in-process) and LangGraph
+# MemorySaver for state — it does NOT require Qdrant or Redis.
+# These services are provided for chapters that demonstrate
+# production-scale vector search and caching patterns.
+# All notebooks run with NOTEBOOK_TEST_MODE=1 in CI and do not
+# require these services to be running.
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # Qdrant — vector database for production RAG demonstrations
+  # Used as an optional reference in: Chapter 16 (RAG), Chapter 17 (Memory)
+  # The GAS capstone uses FAISS instead (no Qdrant dependency).
+  # Dashboard: http://localhost:6333/dashboard
+  # REST API:  http://localhost:6333
+  # gRPC:      localhost:6334
+  # ----------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.9.4
+    container_name: agentic-ai-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST / dashboard
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------
+  # Redis — shared memory & task queue demonstrations
+  # Used as an optional reference in: Chapter 11 (Infrastructure), Chapter 17 (Memory)
+  # The GAS capstone uses LangGraph MemorySaver instead (no Redis dependency).
+  # Connection: redis://localhost:6379
+  # ----------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: agentic-ai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------
+  # Jupyter Lab — notebook server with repo mounted
+  # URL: http://localhost:8888  (token set in .env)
+  #
+  # NOTE: This service uses your local Python environment image.
+  # Build it once with: docker compose build jupyter
+  # Or use the pre-built image below (no GPU support).
+  # ----------------------------------------------------------
+  jupyter:
+    image: quay.io/jupyter/scipy-notebook:python-3.11
+    container_name: agentic-ai-jupyter
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    volumes:
+      # Mount the entire repo into the notebook working directory
+      - .:/home/jovyan/work
+      # Persist installed packages across restarts
+      - jupyter_packages:/home/jovyan/.local
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-changeme}
+      # Pass through API keys so notebooks can load them
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
+      GAS_PATIENT_ID: ${GAS_PATIENT_ID:-patient-001}
+      GAS_ALERT_EMAIL: ${GAS_ALERT_EMAIL:-caregiver@example.com}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    working_dir: /home/jovyan/work
+    # Install repo requirements on startup
+    command: >
+      bash -c "
+        pip install --quiet -r requirements.txt &&
+        start-notebook.sh
+          --NotebookApp.token='${JUPYTER_TOKEN:-changeme}'
+          --NotebookApp.notebook_dir='/home/jovyan/work'
+      "
+
+# ============================================================
+# Named volumes — data persists across `docker compose down`
+# Use `docker compose down -v` to also remove volumes.
+# ============================================================
+volumes:
+  qdrant_data:
+    driver: local
+  redis_data:
+    driver: local
+  jupyter_packages:
+    driver: local

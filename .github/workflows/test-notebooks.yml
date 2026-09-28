@@ -1,0 +1,169 @@
+name: Test Notebooks
+
+# ============================================================
+# Runs nbmake on every notebook in the repository.
+# Triggered on push to main/develop and on all pull requests.
+# ============================================================
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "release/**"
+    paths:
+      - "**.ipynb"
+      - "**.py"
+      - "requirements.txt"
+      - ".github/workflows/test-notebooks.yml"
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "**.ipynb"
+      - "**.py"
+      - "requirements.txt"
+      - ".github/workflows/test-notebooks.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-notebooks:
+    name: "nbmake — Python ${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+
+    # ----------------------------------------------------------
+    # Services: Qdrant and Redis are started as sidecar
+    # containers so notebooks that need them can connect.
+    # ----------------------------------------------------------
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.11.0
+        ports:
+          - 6333:6333
+        # No health check: curl is not in the Qdrant image.
+        # Qdrant starts in <1s; notebooks use NOTEBOOK_TEST_MODE=1 so
+        # they don't actually need Qdrant to be ready before running.
+
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # --------------------------------------------------------
+      # 1. Checkout
+      # --------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------------
+      # 2. Set up Python
+      # --------------------------------------------------------
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # --------------------------------------------------------
+      # 3. Install uv (fast resolver — handles deep dep graphs)
+      # --------------------------------------------------------
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "requirements.txt"
+
+      # --------------------------------------------------------
+      # 4. Install dependencies via uv
+      #    uv's resolver handles the complex dep graph that
+      #    causes pip's "resolution-too-deep" error.
+      # --------------------------------------------------------
+      - name: Install requirements
+        run: uv pip install --system -r requirements.txt
+
+      # --------------------------------------------------------
+      # 5. Write a minimal .env so notebooks can load_dotenv()
+      #    without failing. Real API calls are skipped via the
+      #    CI_MODE environment variable (see shared/llm_client.py).
+      # --------------------------------------------------------
+      - name: Create .env for CI
+        run: |
+          cat > .env <<'EOF'
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+          OLLAMA_BASE_URL=http://localhost:11434
+          QDRANT_URL=http://localhost:6333
+          REDIS_URL=redis://localhost:6379/0
+          GAS_PATIENT_ID=patient-ci-001
+          GAS_ALERT_EMAIL=ci@example.com
+          CI_MODE=true
+          EOF
+
+      # --------------------------------------------------------
+      # 6. Discover and run all notebooks with nbmake
+      #    --timeout: max seconds per cell (120 s)
+      #    --ignore-glob: skip notebooks marked as slow/manual
+      # --------------------------------------------------------
+      - name: Run notebooks with nbmake
+        env:
+          NOTEBOOK_TEST_MODE: "1"
+          QDRANT_URL: "http://localhost:6333"
+          REDIS_URL: "redis://localhost:6379/0"
+        run: |
+          mkdir -p test-results
+          pytest \
+            --nbmake \
+            --nbmake-timeout=120 \
+            --ignore-glob="**/ch24_peft_lora/**" \
+            --ignore-glob="**/ch25_deployment/**" \
+            --ignore-glob="**/*_slow*" \
+            --ignore-glob="**/*_manual*" \
+            --ignore-glob="**/.ipynb_checkpoints/**" \
+            -v \
+            --tb=short \
+            --junitxml=test-results/nbmake-results.xml \
+            $(find . -name "*.ipynb" \
+                -not -path "./.venv/*" \
+                -not -path "./node_modules/*" \
+                -not -path "*/.ipynb_checkpoints/*")
+
+      # --------------------------------------------------------
+      # 7. Upload test results (always, so failures are visible)
+      # --------------------------------------------------------
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nbmake-results-py${{ matrix.python-version }}
+          path: test-results/
+          retention-days: 30
+
+      # --------------------------------------------------------
+      # 8. Publish test summary in the PR / commit view
+      # --------------------------------------------------------
+      - name: Publish test summary
+        if: always() && hashFiles('test-results/nbmake-results.xml') != ''
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: test-results/nbmake-results.xml
+          comment_mode: always
+          check_name: "Notebook Tests (Python ${{ matrix.python-version }})"

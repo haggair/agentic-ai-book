@@ -1,0 +1,190 @@
+# ============================================================
+# agentic-ai-book — .gitignore
+# ============================================================
+
+# ------------------------------------------------------------
+# Python
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+MANIFEST
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env.bak
+.conda/
+conda-env/
+
+# ------------------------------------------------------------
+# Environment & secrets — NEVER commit these
+# ------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+credentials/
+
+# ------------------------------------------------------------
+# Jupyter Notebooks
+# ------------------------------------------------------------
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+# Uncomment to ignore all notebook outputs (keeps diffs clean):
+# *.ipynb
+
+# ------------------------------------------------------------
+# Distribution / packaging
+# ------------------------------------------------------------
+*.tar.gz
+*.whl
+*.zip
+
+# ------------------------------------------------------------
+# Testing & coverage
+# ------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.cover
+nosetests.xml
+test-results/
+junit*.xml
+
+# ------------------------------------------------------------
+# Type checking
+# ------------------------------------------------------------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# ------------------------------------------------------------
+# Linting & formatting
+# ------------------------------------------------------------
+.ruff_cache/
+
+# ------------------------------------------------------------
+# IDEs & editors
+# ------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------------------------------------------
+# macOS
+# ------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# ------------------------------------------------------------
+# Windows
+# ------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ------------------------------------------------------------
+# Docker
+# ------------------------------------------------------------
+.docker/
+
+# ------------------------------------------------------------
+# Data & model artefacts (large files — use Git LFS or DVC)
+# ------------------------------------------------------------
+data/raw/
+data/processed/
+models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pkl
+*.pickle
+*.parquet
+*.arrow
+*.feather
+*.csv.gz
+*.jsonl.gz
+
+# Hugging Face cache
+.cache/huggingface/
+~/.cache/huggingface/
+
+# ------------------------------------------------------------
+# Logs & temporary files
+# ------------------------------------------------------------
+*.log
+*.tmp
+*.temp
+logs/
+tmp/
+temp/
+.tmp/
+
+# ------------------------------------------------------------
+# Qdrant local storage (when not using Docker)
+# ------------------------------------------------------------
+qdrant_storage/
+
+# ------------------------------------------------------------
+# Node (for any JS tooling)
+# ------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ------------------------------------------------------------
+# Misc
+# ------------------------------------------------------------
+*.bak
+*.orig
+.hypothesis/
